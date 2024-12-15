@@ -1,0 +1,82 @@
+receivers:
+  filelog:
+    include: ["D:\\projects\\2kevents.json"]
+  nop:
+  otlp/spanmetrics:
+    protocols:
+      grpc:
+        endpoint: "localhost:12345"
+  otlp:
+    protocols:
+      grpc:
+      http:
+  jaeger:
+    protocols:
+      grpc:
+      thrift_http:
+  hostmetrics:
+    collection_interval: 3s
+    scrapers:
+      cpu:
+      load:
+      memory:
+      disk:
+      filesystem:
+      network:
+processors:
+  batch:
+    send_batch_size: 1000
+    timeout: 10s
+  span/includeexclude:
+    include:
+      match_type: regexp
+      services: ["banks"]
+      span_names: ["^(.*?)/(.*?)$"]
+    exclude:
+      match_type: strict
+      span_names: ["donot/change"]
+    name:
+      to_attributes:
+        rules:
+          - "(?P<operation_website>.*?)$"
+extensions:
+  zpages: {}
+exporters:
+  clickhouse:
+    endpoint: tcp://localhost:9000/signoz_traces
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      queue_size: 100
+      num_consumers: 5
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+  elasticsearch:
+    endpoints: ["http://localhost:8081/elastic"]
+    logs_index: "logs-%{+yyyy.MM.dd}"
+  prometheusremotewrite:
+    endpoint: "http://localhost:8081/promql/api/v1/write"
+service:
+  pipelines:
+    logs:
+      receivers: [filelog]
+      processors: [batch]
+      exporters: [elasticsearch]
+    #    traces:
+    #      receivers: [nop]
+    #      #receivers: [jaeger, otlp]
+    #      processors: [span/includeexclude, batch]
+    #      exporters: [elasticsearch]
+    metrics:
+      #      receivers: [otlp, hostmetrics]
+      receivers: [hostmetrics]
+      processors: [batch]
+      exporters: [prometheusremotewrite]
+      #exporters: [clickhouse, elasticsearch]
+#    metrics/spanmetrics:
+#      receivers: [otlp/spanmetrics]
+#      exporters: [prometheus, elasticsearch]
